@@ -3890,27 +3890,27 @@ const UserManagement = ({ setCurrentView }) => {
           )}
           {approverViewMode === 'single' && (
             <>
-     <Form.Group controlId="usernameDisplay">
-  <Form.Label>Username</Form.Label>
-  <Form.Control
-    type="text"
-    value={selectedUser?.name || ''}
-    readOnly
-  />
-</Form.Group>
+              <Form.Group controlId="usernameDisplay">
+                <Form.Label>Username</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={selectedUser?.name || ''}
+                  readOnly
+                />
+              </Form.Group>
 
-<Form.Group
-  controlId="allowedToApprove"
-  className="mt-3 d-flex align-items-center justify-content-between"
->
-  <Form.Label className="mb-0">Allowed to Approve</Form.Label>
-  <Form.Check
-    type="switch"
-    id="allowed-approve-switch"
-    checked={allowedToApprove}
-    onChange={() => setAllowedToApprove(!allowedToApprove)}
-  />
-</Form.Group>
+              <Form.Group
+                controlId="allowedToApprove"
+                className="mt-3 d-flex align-items-center justify-content-between"
+              >
+                <Form.Label className="mb-0">Allowed to Approve</Form.Label>
+                <Form.Check
+                  type="switch"
+                  id="allowed-approve-switch"
+                  checked={allowedToApprove}
+                  onChange={() => setAllowedToApprove(!allowedToApprove)}
+                />
+              </Form.Group>
 
               <Button
                 variant="success"

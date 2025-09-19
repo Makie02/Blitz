@@ -3332,7 +3332,7 @@ const RegularVisaForm = () => {
                 );
 
             case 3:
-                // File upload step
+                // File upload steps
                 return (
                     <div>
                         <h3>Upload File</h3>

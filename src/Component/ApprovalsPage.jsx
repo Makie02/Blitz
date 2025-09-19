@@ -1197,4 +1197,3 @@ const handleDeleteSelected = async () => {
     </div>
   );
 }
-

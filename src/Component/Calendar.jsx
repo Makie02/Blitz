@@ -354,7 +354,6 @@ export default function VisaCalendar() {
           )}
         </div>
       )}
-
     </div >
   );
 }

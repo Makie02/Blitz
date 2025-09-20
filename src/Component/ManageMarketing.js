@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "../supabaseClient";
 import EditModal from "./EditModal";
 import { FaEdit, FaTrash } from 'react-icons/fa'
+import Swal from 'sweetalert2'; // Make sure you have this at the top
 
 function EnhancedDatabaseInterface() {
   const [data, setData] = useState([]);
@@ -314,82 +315,141 @@ function EnhancedDatabaseInterface() {
   };
 
 
-  const handleDelete = async (rowId) => {
-    setUpdating(true);
-    try {
-      // Find the main row by ID
-      const row = data.find(r => r.id === rowId);
-      if (!row) {
-        setError("Row not found.");
-        return;
+const handleDelete = async (rowId) => {
+  const result = await Swal.fire({
+    title: "Are you sure?",
+    text: "Do you want to delete this record and restore its budget?",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Yes, delete it",
+    cancelButtonText: "No, cancel",
+    reverseButtons: true,
+  });
+
+  if (!result.isConfirmed) return;
+
+  setUpdating(true);
+  try {
+    const currentUser = JSON.parse(localStorage.getItem("loggedInUser"));
+    const UserId = currentUser?.UserID || "unknown";
+
+    const row = data.find((r) => r.id === rowId);
+    if (!row) throw new Error("Row not found.");
+
+    const regularCode = row.regularpwpcode || row.regularcode || row.regular_code;
+    if (!regularCode) throw new Error("Related code missing for deletion.");
+
+    // ✅ STEP 1: Restore Budget to amount_badget (if applicable)
+    if (row.coverPwpCode && row.credit_budget != null) {
+      try {
+        const { data: budgetRow, error: fetchError } = await supabase
+          .from("amount_badget")
+          .select("id, remainingbalance")
+          .eq("pwp_code", row.coverPwpCode)
+          .limit(1)
+          .maybeSingle();
+
+        if (fetchError) {
+          console.error("⚠️ Error fetching amount_badget:", fetchError.message);
+        } else if (budgetRow) {
+          const currentBalance = Number(budgetRow.remainingbalance || 0);
+          const amountToAdd = Number(row.credit_budget || 0);
+          const newBalance = currentBalance + amountToAdd;
+
+          const { error: updateBudgetError } = await supabase
+            .from("amount_badget")
+            .update({ remainingbalance: newBalance })
+            .eq("id", budgetRow.id);
+
+          if (updateBudgetError) {
+            console.error("⚠️ Error updating remaining balance:", updateBudgetError.message);
+          } else {
+            console.log(`✅ Restored Remaining Balance: PHP ${newBalance.toLocaleString()}`);
+          }
+        } else {
+          console.warn("⚠️ No matching amount_badget row for:", row.coverPwpCode);
+        }
+      } catch (e) {
+        console.error("❌ Error handling budget restore:", e.message);
       }
-
-      // Main codes to match related rows
-      const regularCode = row.regularpwpcode || row.regularcode || row.regular_code;
-
-      if (!regularCode) {
-        setError("Related code missing for deletion.");
-        return;
-      }
-
-      // 1. Delete related entries first (children before parent)
-
-      // Delete from regular_accountlis_badget
-      const { error: budgetError } = await supabase
-        .from("regular_accountlis_badget")
-        .delete()
-        .eq("regularcode", regularCode);
-
-      if (budgetError) {
-        throw new Error(`Failed to delete budget rows: ${budgetError.message}`);
-      }
-
-      // Delete from regular_attachments
-      const { error: attachmentError } = await supabase
-        .from("regular_attachments")
-        .delete()
-        .eq("regularpwpcode", regularCode);
-
-      if (attachmentError) {
-        throw new Error(`Failed to delete attachments: ${attachmentError.message}`);
-      }
-
-      const { error: ApprovalHistory } = await supabase
-        .from("Approval_History")
-        .delete()
-        .eq("PwpCode", regularCode);
-      if (ApprovalHistory) throw new Error(`Failed to delete budget rows: ${ApprovalHistory.message}`);
-
-
-      // Delete from regular_sku_listing
-      const { error: skuError } = await supabase
-        .from("regular_sku_listing")
-        .delete()
-        .eq("regular_code", regularCode);
-
-      if (skuError) {
-        throw new Error(`Failed to delete SKUs: ${skuError.message}`);
-      }
-
-      // 2. Now delete from the main table (e.g., regular_pwp)
-      const { error: mainDeleteError } = await supabase
-        .from("regular_pwp")
-        .delete()
-        .eq("id", rowId);
-
-      if (mainDeleteError) {
-        throw new Error(`Failed to delete main record: ${mainDeleteError.message}`);
-      }
-
-      // Refresh and close modal
-      setDeleteConfirm(null);
-      await fetchData();
-    } catch (err) {
-      setError(`Delete failed: ${err.message}`);
-    } finally {
-      setUpdating(false);
     }
-  };
+
+    // ✅ STEP 2: Delete child tables first
+    const deleteOps = [
+      supabase.from("regular_accountlis_badget").delete().eq("regularcode", regularCode),
+      supabase.from("regular_attachments").delete().eq("regularpwpcode", regularCode),
+      supabase.from("Approval_History").delete().eq("PwpCode", regularCode),
+      supabase.from("regular_sku_listing").delete().eq("regular_code", regularCode),
+      supabase.from("amount_badget").delete().eq("pwp_code", regularCode),
+    ];
+
+    const deleteResults = await Promise.all(deleteOps);
+    for (const res of deleteResults) {
+      if (res.error) throw new Error(res.error.message);
+    }
+
+    // ✅ STEP 3: Delete from main table
+    const { error: mainDeleteError } = await supabase
+      .from("regular_pwp")
+      .delete()
+      .eq("id", rowId);
+
+    if (mainDeleteError) {
+      throw new Error(`Failed to delete main record: ${mainDeleteError.message}`);
+    }
+
+    // ✅ STEP 4: Log to RecentActivity
+    try {
+      const ipRes = await fetch("https://api.ipify.org?format=json");
+      const { ip } = await ipRes.json();
+
+      const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
+      const geo = await geoRes.json();
+
+      const activity = {
+        userId: UserId,
+        device: navigator.userAgent || "Unknown Device",
+        location: `${geo.city || "Unknown"}, ${geo.region || "Unknown"}, ${geo.country_name || "Unknown"}`,
+        ip,
+        time: new Date().toISOString(),
+        action: `Deleted regular PWP entry (${regularCode})`,
+      };
+
+      const { error: activityError } = await supabase
+        .from("RecentActivity")
+        .insert([activity]);
+
+      if (activityError) {
+        console.error("❌ Failed to log activity:", activityError.message);
+      } else {
+        console.log("✅ Activity logged successfully");
+      }
+    } catch (logErr) {
+      console.error("❌ Failed to capture activity log:", logErr.message || logErr);
+    }
+
+    // ✅ Final: Refresh and notify
+    setDeleteConfirm(null);
+    await fetchData();
+
+    Swal.fire({
+      icon: "success",
+      title: "Deleted",
+      text: `Record (${regularCode}) and budget successfully deleted.`,
+      timer: 2000,
+      showConfirmButton: false,
+    });
+  } catch (err) {
+    console.error("❌ Delete Error:", err.message);
+    setError(`Delete failed: ${err.message}`);
+    Swal.fire("Error", err.message, "error");
+  } finally {
+    setUpdating(false);
+  }
+};
+
+
+  const [modalTitle, setModalTitle] = useState("");
 
   const storedUser = localStorage.getItem('loggedInUser');
   const parsedUser = storedUser ? JSON.parse(storedUser) : null;
@@ -832,199 +892,221 @@ function EnhancedDatabaseInterface() {
               </tr>
             </thead>
             <tbody>
-              {paginatedData.map((row, index) => (
-                <tr key={row.id || index} style={{
-                  backgroundColor: index % 2 === 0 ? 'white' : '#fafafa',
-                  transition: 'background-color 0.2s ease'
-                }}>
-                  {columns.map(col => (
-                    <td key={col} style={{
-                      padding: '16px 20px',
-                      borderBottom: '1px solid #e0e0e0',
-                      fontSize: '14px',
-                      color: '#000000ff'
-                    }}>
-                      {editingId === row.id && col !== 'id' && col !== 'createdat' ? (
-                        <input
-                          type="text"
-                          value={editingData[col] || ''}
-                          onChange={(e) => setEditingData({ ...editingData, [col]: e.target.value })}
-                          style={{
-                            padding: '6px 10px',
-                            border: '1px solid #ddd',
-                            borderRadius: '4px',
-                            fontSize: '14px',
-                            width: '100%',
-                            minWidth: '120px'
-                          }}
-                        />
-                      ) : (
-                        <span style={{
-                          maxWidth: col === 'createdat' ? '150px' : '200px',
-                          display: 'inline-block',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {formatCellValue(row[col], col)}
-                        </span>
-                      )}
-                    </td>
-                  ))}
-                  <td style={{
-                    padding: '16px 20px',
-                    borderBottom: '1px solid #e0e0e0',
-                    textAlign: 'center'
-                  }}>
-                    {getStatusBadge(row.approval_status)}
-                  </td>
-                  <td style={{
-                    padding: '16px 20px',
-                    borderBottom: '1px solid #e0e0e0',
-                    textAlign: 'center'
-                  }}>
-                    {editingId === row.id ? (
-                      <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                        <button
-                          onClick={handleSave}
-                          disabled={updating}
-                          style={{
-                            padding: '6px 12px',
-                            backgroundColor: '#4caf50',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: updating ? 'not-allowed' : 'pointer',
-                            fontSize: '12px',
-                            fontWeight: '500',
-                            opacity: updating ? 0.7 : 1
-                          }}
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={handleCancel}
-                          disabled={updating}
-                          style={{
-                            padding: '6px 12px',
-                            backgroundColor: '#757575',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: updating ? 'not-allowed' : 'pointer',
-                            fontSize: '12px',
-                            fontWeight: '500',
-                            opacity: updating ? 0.7 : 1
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
+              {paginatedData
+                .slice()
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // Sort by newest first
+                .filter(row => {
+                  const currentUser = JSON.parse(localStorage.getItem('loggedInUser'));
+                  const currentUserName = currentUser?.name?.toLowerCase().trim() || "";
+                  const role = currentUser?.role || "";
 
-                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                        {/* Edit Button */}
-                        <button
-                          onClick={() => handleEdit(row)}
-                          disabled={updating || row.approval_status === 'Approved'}
-                          aria-label={`Edit ${row.name}`}
-                          title="Edit"
-                          style={{
-                            border: "none",
-                            background: "none",
-                            cursor: (updating || row.approval_status === 'Approved') ? "not-allowed" : "pointer",
-                            padding: "8px",
-                            color: "#d32f2f",
-                            transition: "transform 0.3s ease, box-shadow 0.3s ease",
-                            boxShadow: row.approval_status === 'Approved'
-                              ? "0 4px 6px rgba(108, 117, 125, 0.5)" // grayish for disabled
-                              : "0 4px 6px rgba(0,0,0,0.2)",
-                            borderRadius: "8px",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            marginLeft: "8px",
-                            outline: "none",
-                            opacity: (updating || row.approval_status === 'Approved') ? 0.5 : 1,
-                            pointerEvents: (updating || row.approval_status === 'Approved') ? 'none' : 'auto'
-                          }}
-                          onMouseEnter={(e) => {
-                            if (row.approval_status !== 'Approved') {
+                  if (role === 'admin') return true;
+                  return row.createForm?.toLowerCase().trim() === currentUserName;
+                })
+                .map((row, index) => (
+                  <tr
+                    key={row.id || index}
+                    style={{
+                      backgroundColor: index % 2 === 0 ? 'white' : '#fafafa',
+                      transition: 'background-color 0.2s ease'
+                    }}
+                  >
+                    {columns.map(col => (
+                      <td
+                        key={col}
+                        style={{
+                          padding: '16px 20px',
+                          borderBottom: '1px solid #e0e0e0',
+                          fontSize: '14px',
+                          color: '#000000ff'
+                        }}
+                      >
+                        {editingId === row.id && col !== 'id' && col !== 'createdat' ? (
+                          <input
+                            type="text"
+                            value={editingData[col] || ''}
+                            onChange={(e) => setEditingData({ ...editingData, [col]: e.target.value })}
+                            style={{
+                              padding: '6px 10px',
+                              border: '1px solid #ddd',
+                              borderRadius: '4px',
+                              fontSize: '14px',
+                              width: '100%',
+                              minWidth: '120px'
+                            }}
+                          />
+                        ) : (
+                          <span
+                            style={{
+                              maxWidth: col === 'createdat' ? '150px' : '200px',
+                              display: 'inline-block',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {formatCellValue(row[col], col)}
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                    <td
+                      style={{
+                        padding: '16px 20px',
+                        borderBottom: '1px solid #e0e0e0',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {getStatusBadge(row.approval_status)}
+                    </td>
+                    <td
+                      style={{
+                        padding: '16px 20px',
+                        borderBottom: '1px solid #e0e0e0',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {editingId === row.id ? (
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                          <button
+                            onClick={handleSave}
+                            disabled={updating}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#4caf50',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: updating ? 'not-allowed' : 'pointer',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              opacity: updating ? 0.7 : 1
+                            }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancel}
+                            disabled={updating}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#757575',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: updating ? 'not-allowed' : 'pointer',
+                              fontSize: '12px',
+                              fontWeight: '500',
+                              opacity: updating ? 0.7 : 1
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                          {/* Edit Button */}
+                          <button
+                            onClick={() => handleEdit(row)}
+                            disabled={updating || row.approval_status === 'Approved'}
+                            aria-label={`Edit ${row.name}`}
+                            title="Edit"
+                            style={{
+                              border: "none",
+                              background: "none",
+                              cursor: (updating || row.approval_status === 'Approved') ? "not-allowed" : "pointer",
+                              padding: "8px",
+                              color: "#d32f2f",
+                              transition: "transform 0.3s ease, box-shadow 0.3s ease",
+                              boxShadow: row.approval_status === 'Approved'
+                                ? "0 4px 6px rgba(108, 117, 125, 0.5)"
+                                : "0 4px 6px rgba(0,0,0,0.2)",
+                              borderRadius: "8px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              marginLeft: "8px",
+                              outline: "none",
+                              opacity: (updating || row.approval_status === 'Approved') ? 0.5 : 1,
+                              pointerEvents: (updating || row.approval_status === 'Approved') ? 'none' : 'auto'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (row.approval_status !== 'Approved') {
+                                e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
+                                e.currentTarget.style.boxShadow = "0 8px 15px rgba(0, 252, 34, 0.5)";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = "scale(1) rotateX(0) rotateY(0)";
+                              e.currentTarget.style.boxShadow = row.approval_status === 'Approved'
+                                ? "0 4px 6px rgba(108, 117, 125, 0.5)"
+                                : "0 4px 6px rgba(0,0,0,0.2)";
+                            }}
+                            onMouseDown={(e) => {
+                              if (row.approval_status !== 'Approved') {
+                                e.currentTarget.style.transform = "scale(0.95) rotateX(5deg) rotateY(5deg)";
+                                e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
+                              }
+                            }}
+                            onMouseUp={(e) => {
+                              if (row.approval_status !== 'Approved') {
+                                e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
+                                e.currentTarget.style.boxShadow = "0 8px 15px rgba(0, 255, 128, 0.5)";
+                              }
+                            }}
+                          >
+                            <FaEdit style={{ color: row.approval_status === 'Approved' ? "#6c757d" : "orange", fontSize: "20px" }} />
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            onClick={() => setDeleteConfirm(row.id)}
+                            disabled={updating}
+                            aria-label={`Delete ${row.name}`}
+                            title="Delete"
+                            style={{
+                              border: "none",
+                              background: "none",
+                              cursor: updating ? "not-allowed" : "pointer",
+                              padding: "8px",
+                              color: "#d32f2f",
+                              transition: "transform 0.3s ease, box-shadow 0.3s ease",
+                              boxShadow: "0 4px 6px rgba(0,0,0,0.2)",
+                              borderRadius: "8px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              marginLeft: "8px",
+                              outline: "none",
+                              opacity: updating ? 0.5 : 1,
+                              pointerEvents: updating ? 'none' : 'auto'
+                            }}
+                            onMouseEnter={(e) => {
                               e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
-                              e.currentTarget.style.boxShadow = "0 8px 15px rgba(0, 252, 34, 0.5)";
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = "scale(1) rotateX(0) rotateY(0)";
-                            e.currentTarget.style.boxShadow = row.approval_status === 'Approved'
-                              ? "0 4px 6px rgba(108, 117, 125, 0.5)"
-                              : "0 4px 6px rgba(0,0,0,0.2)";
-                          }}
-                          onMouseDown={(e) => {
-                            if (row.approval_status !== 'Approved') {
+                              e.currentTarget.style.boxShadow = "0 8px 15px rgba(211, 47, 47, 0.7)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = "scale(1) rotateX(0) rotateY(0)";
+                              e.currentTarget.style.boxShadow = "0 4px 6px rgba(0,0,0,0.2)";
+                            }}
+                            onMouseDown={(e) => {
                               e.currentTarget.style.transform = "scale(0.95) rotateX(5deg) rotateY(5deg)";
                               e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
-                            }
-                          }}
-                          onMouseUp={(e) => {
-                            if (row.approval_status !== 'Approved') {
+                            }}
+                            onMouseUp={(e) => {
                               e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
-                              e.currentTarget.style.boxShadow = "0 8px 15px rgba(0, 255, 128, 0.5)";
-                            }
-                          }}
-                        >
-                          <FaEdit style={{ color: row.approval_status === 'Approved' ? "#6c757d" : "orange", fontSize: "20px" }} />
-                        </button>
-
-                        {/* Delete Button */}
-                        <button
-                          onClick={() => setDeleteConfirm(row.id)}
-                          disabled={updating}
-                          aria-label={`Delete ${row.name}`}
-                          title="Delete"
-                          style={{
-                            border: "none",
-                            background: "none",
-                            cursor: updating ? "not-allowed" : "pointer",
-                            padding: "8px",
-                            color: "#d32f2f",
-                            transition: "transform 0.3s ease, box-shadow 0.3s ease",
-                            boxShadow: "0 4px 6px rgba(0,0,0,0.2)",
-                            borderRadius: "8px",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            marginLeft: "8px",
-                            outline: "none",
-                            opacity: updating ? 0.5 : 1,
-                            pointerEvents: updating ? 'none' : 'auto'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
-                            e.currentTarget.style.boxShadow = "0 8px 15px rgba(211, 47, 47, 0.7)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = "scale(1) rotateX(0) rotateY(0)";
-                            e.currentTarget.style.boxShadow = "0 4px 6px rgba(0,0,0,0.2)";
-                          }}
-                          onMouseDown={(e) => {
-                            e.currentTarget.style.transform = "scale(0.95) rotateX(5deg) rotateY(5deg)";
-                            e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
-                          }}
-                          onMouseUp={(e) => {
-                            e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
-                            e.currentTarget.style.boxShadow = "0 8px 15px rgba(211, 0, 0, 0.7)";
-                          }}
-                        >
-                          <FaTrash style={{ color: "red", fontSize: "20px" }} />
-                        </button>
-                      </div>
-
-                    )}
-                  </td>
-                </tr>
-              ))}
+                              e.currentTarget.style.boxShadow = "0 8px 15px rgba(211, 0, 0, 0.7)";
+                            }}
+                          >
+                            <FaTrash style={{ color: "red", fontSize: "20px" }} />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
             </tbody>
+
           </table>
 
 
@@ -1091,12 +1173,15 @@ function EnhancedDatabaseInterface() {
       </div>
       <EditModal
         isOpen={isModalOpen}
+        title={modalTitle}
         rowData={selectedRow}
         onClose={() => setIsModalOpen(false)}
-
+        onSave={handleSave}
+        updating={updating}
         filter="all"
-        filteredDistributors={filteredDistributors} // <-- pass this down
+        filteredDistributors={filteredDistributors}
       />
+
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <div style={{

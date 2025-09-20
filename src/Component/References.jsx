@@ -13,6 +13,8 @@ import RegularSkuTable from '../NewComponents/RegularSkuTable.jsx';
 import Category from '../NewComponents/Category.jsx';
 import Category_Listing from '../NewComponents/Category_Listing.jsx';
 import ApprovalSettings from '../NewComponents/ApprovalSettings.jsx';
+import Badget from '../NewComponents/Badget.js';
+import NotFoundPage from '../Nofound/NotFoundPage.js';
 
 const References = (setCurrentView) => {
     const [view, setView] = useState(null); // null means show cards list
@@ -38,6 +40,12 @@ const References = (setCurrentView) => {
 
         { id: 14, title: "APPROVAL-SETTING" },
 
+        { id: 15, title: "BUDGET-VIEW" },
+
+        { id: 16, title: "404 PAGE" },
+
+
+        
 
 
 
@@ -45,7 +53,7 @@ const References = (setCurrentView) => {
 
     const handleClick = (card) => {
         // For cards that have components, set view to title
-        if (card.title === 'USER ROLE' || card.title === 'DISTRIBUTOR-LISTING' || card.title === 'USER MANAGEMENT' || card.title === 'POSITION' || card.title === 'LISTING-ACTIVITY' || card.title === 'REGULAR-SKU'
+        if (card.title === 'USER ROLE' || card.title === 'BUDGET-VIEW' ||  card.title === '404 PAGE' ||    card.title === 'DISTRIBUTOR-LISTING'|| card.title === 'USER MANAGEMENT' || card.title === 'POSITION' || card.title === 'LISTING-ACTIVITY' || card.title === 'REGULAR-SKU'
 
             || card.title === 'APPROVAL-SETTING'
 
@@ -85,6 +93,8 @@ const References = (setCurrentView) => {
                 {view === 'DISTRIBUTOR-LISTING' && <CategorySelector />}
                 {view === 'DEPARTMENT' && <Department />}
 
+                {view === 'BUDGET-VIEW' && <Badget />}
+
 
                 {view === 'Promoted-SKU/s' && <PromotedSKU />}
                 {view === 'POSITION' && <Position />}
@@ -96,6 +106,7 @@ const References = (setCurrentView) => {
                 {view === 'CATEGORY-LISTING' && <Category_Listing />}
 
                 {view === 'APPROVAL-SETTING' && <ApprovalSettings />}
+                {view === '404 PAGE' && <NotFoundPage />}
 
 
 

@@ -78,169 +78,172 @@ const totalPages = Math.ceil(data.length / rowsPerPage);
   );
 
   // Modified fetchData function - replace your existing fetchData with this
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
 
-      let coverData = [];
-      let regularData = [];
-      let allColumns = [];
 
-      if (filter === "all" || filter === "cover") {
-        const { data: cData, error: cError } = await supabase
-          .from("cover_pwp")
-          .select(COVER_COLUMNS.join(','))
-          .order("id", { ascending: false })
-          .limit(50);
 
-        if (cError) throw cError;
-        coverData = (cData || []).map((item) => ({
-          ...filterColumns(item, COVER_COLUMNS),
-          source: "cover_pwp",
-          pwp_code: item.cover_code // Use this to match with Approval_History
-        }));
-      }
 
-      if (filter === "all" || filter === "regular") {
-        const { data: rData, error: rError } = await supabase
-          .from("regular_pwp")
-          .select(REGULAR_COLUMNS.join(','))
-          .order("id", { ascending: false })
-          .limit(50);
+ 
+const fetchData = useCallback(async () => {
+  try {
+    setLoading(true);
+    setError(null);
 
-        if (rError) throw rError;
-        regularData = (rData || []).map((item) => ({
-          ...filterColumns(item, REGULAR_COLUMNS),
-          source: "regular_pwp",
-          pwp_code: item.regularpwpcode // Use this to match with Approval_History
-        }));
-      }
+    const currentUser = JSON.parse(localStorage.getItem('loggedInUser'));
+    const currentUserName = currentUser?.name?.toLowerCase().trim() || "";
+    const role = currentUser?.role || "";
 
-      const mergedData = [...coverData, ...regularData];
+    let coverData = [];
+    let regularData = [];
+    let allColumns = [];
 
-      // Get all PWP codes to fetch approval status
-      const allPwpCodes = mergedData
-        .map(item => item.pwp_code)
-        .filter(code => code); // Remove null/undefined codes
+    if (filter === "all" || filter === "cover") {
+      const { data: cData, error: cError } = await supabase
+        .from("cover_pwp")
+        .select(COVER_COLUMNS.join(','))
+        .order("id", { ascending: false })
+        .limit(50);
 
-      // Fetch approval status for all PWP codes
-      const approvalStatusMap = await getApprovalStatus(allPwpCodes);
+      if (cError) throw cError;
 
-      // Add approval status to each item
-      const dataWithApprovalStatus = mergedData.map(item => ({
-        ...item,
-        approval_status: approvalStatusMap[item.pwp_code]?.status || 'Pending',
-        date_responded: approvalStatusMap[item.pwp_code]?.date_responded,
-        approval_created: approvalStatusMap[item.pwp_code]?.approval_created
+      coverData = (cData || []).map((item) => ({
+        ...filterColumns(item, COVER_COLUMNS),
+        source: "cover_pwp",
+        pwp_code: item.cover_code
       }));
-
-      // Apply filters
-      let filteredData = dataWithApprovalStatus;
-
-      // Apply search filter
-      if (searchQuery) {
-        filteredData = filteredData.filter(item => {
-          const searchFields = [
-            item.code,                   // for "all" filter
-            item.cover_code,             // for cover records
-            item.regularpwpcode,        // for regular records
-            item.id,
-            item.account_type,
-            item.accountType,
-            item.pwp_type,
-            item.pwptype,
-            item.createForm
-          ];
-
-          return searchFields.some(field =>
-            field && field.toString().toLowerCase().includes(searchQuery.toLowerCase())
-          );
-        });
-      }
-
-      // Apply status filter based on approval status
-      if (statusFilter !== "all") {
-        filteredData = filteredData.filter(item => {
-          const itemStatus = item.approval_status ? item.approval_status.toLowerCase() : 'pending';
-          if (statusFilter === "sent_back") {
-            return itemStatus === "sent back for revision" || itemStatus === "sent back";
-          }
-          if (statusFilter === "cancelled") {
-            return itemStatus === "cancelled";
-          }
-          if (statusFilter === "pending") {
-            return itemStatus === "pending" || !item.approval_status;
-          }
-          if (statusFilter === "approved") {
-            return itemStatus === "approved";
-          }
-          if (statusFilter === "declined") {
-            return itemStatus === "declined";
-          }
-          return itemStatus === statusFilter;
-        });
-      }
-
-      // Apply date filters
-      if (dateFrom) {
-        filteredData = filteredData.filter(item => {
-          if (!item.created_at) return false;
-          const itemDate = new Date(item.created_at);
-          const fromDate = new Date(dateFrom);
-          return itemDate >= fromDate;
-        });
-      }
-
-      if (dateTo) {
-        filteredData = filteredData.filter(item => {
-          if (!item.created_at) return false;
-          const itemDate = new Date(item.created_at);
-          const toDate = new Date(dateTo);
-          toDate.setHours(23, 59, 59, 999);
-          return itemDate <= toDate;
-        });
-      }
-
-      if (filteredData.length > 0) {
-        // Create unified column set
-        const regularCols = REGULAR_COLUMNS.filter(col => col !== 'regularpwpcode');
-        const coverCols = COVER_COLUMNS.filter(col => col !== 'cover_code');
-
-        // Create unified columns with code column as the second column
-        if (filter === "all") {
-          allColumns = ['id', 'code', ...regularCols.slice(1)]; // Skip id since it's already first
-        } else if (filter === "cover") {
-          allColumns = ['id', 'cover_code', ...coverCols.slice(1)];
-        } else if (filter === "regular") {
-          allColumns = ['id', 'regularpwpcode', ...regularCols.slice(1)];
-        }
-
-        // Normalize the data to have a unified 'code' column when showing all
-        const normalizedData = filteredData.map(item => {
-          if (filter === "all") {
-            return {
-              ...item,
-              code: item.regularpwpcode || item.cover_code || '-',
-              accountType: item.accountType || item.account_type || '-',
-              pwptype: item.pwptype || item.pwp_type || '-'
-            };
-          }
-          return item;
-        });
-
-        setColumns(allColumns);
-        setData(normalizedData);
-      } else {
-        setData([]);
-        setColumns([]);
-      }
-    } catch (err) {
-      setError(`Unexpected error: ${err.message}`);
-    } finally {
-      setLoading(false);
     }
-  }, [filter, REGULAR_COLUMNS, COVER_COLUMNS, statusFilter, searchQuery, dateFrom, dateTo]);
+
+    if (filter === "all" || filter === "regular") {
+      const { data: rData, error: rError } = await supabase
+        .from("regular_pwp")
+        .select(REGULAR_COLUMNS.join(','))
+        .order("id", { ascending: false })
+        .limit(50);
+
+      if (rError) throw rError;
+
+      regularData = (rData || []).map((item) => ({
+        ...filterColumns(item, REGULAR_COLUMNS),
+        source: "regular_pwp",
+        pwp_code: item.regularpwpcode
+      }));
+    }
+
+    const mergedData = [...coverData, ...regularData];
+
+    const allPwpCodes = mergedData
+      .map(item => item.pwp_code)
+      .filter(code => code);
+
+    const approvalStatusMap = await getApprovalStatus(allPwpCodes);
+
+    const dataWithApprovalStatus = mergedData.map(item => ({
+      ...item,
+      approval_status: approvalStatusMap[item.pwp_code]?.status || 'Pending',
+      date_responded: approvalStatusMap[item.pwp_code]?.date_responded,
+      approval_created: approvalStatusMap[item.pwp_code]?.approval_created
+    }));
+
+    let filteredData = dataWithApprovalStatus;
+
+    // 🔍 Search Filter
+    if (searchQuery) {
+      filteredData = filteredData.filter(item => {
+        const searchFields = [
+          item.code,
+          item.cover_code,
+          item.regularpwpcode,
+          item.id,
+          item.account_type,
+          item.accountType,
+          item.pwp_type,
+          item.pwptype,
+          item.createForm
+        ];
+        return searchFields.some(field =>
+          field && field.toString().toLowerCase().includes(searchQuery.toLowerCase())
+        );
+      });
+    }
+
+    // 📅 Status Filter
+    if (statusFilter !== "all") {
+      filteredData = filteredData.filter(item => {
+        const itemStatus = item.approval_status?.toLowerCase() || 'pending';
+        if (statusFilter === "sent_back") {
+          return itemStatus === "sent back for revision" || itemStatus === "sent back";
+        }
+        if (statusFilter === "cancelled") return itemStatus === "cancelled";
+        if (statusFilter === "pending") return itemStatus === "pending" || !item.approval_status;
+        if (statusFilter === "approved") return itemStatus === "approved";
+        if (statusFilter === "declined") return itemStatus === "declined";
+        return itemStatus === statusFilter;
+      });
+    }
+
+    // 📅 Date From Filter
+    if (dateFrom) {
+      filteredData = filteredData.filter(item => {
+        if (!item.created_at) return false;
+        return new Date(item.created_at) >= new Date(dateFrom);
+      });
+    }
+
+    // 📅 Date To Filter
+    if (dateTo) {
+      filteredData = filteredData.filter(item => {
+        if (!item.created_at) return false;
+        const itemDate = new Date(item.created_at);
+        const toDate = new Date(dateTo);
+        toDate.setHours(23, 59, 59, 999);
+        return itemDate <= toDate;
+      });
+    }
+
+    // ✅ User Visibility Filter — show only your own entries unless admin
+    if (role !== 'admin') {
+      filteredData = filteredData.filter(item => {
+        const createdFormName = (item.createForm || "").toLowerCase().trim();
+        return createdFormName === currentUserName;
+      });
+    }
+
+    // 🧠 Normalize columns & data
+    if (filteredData.length > 0) {
+      const regularCols = REGULAR_COLUMNS.filter(col => col !== 'regularpwpcode');
+      const coverCols = COVER_COLUMNS.filter(col => col !== 'cover_code');
+
+      if (filter === "all") {
+        allColumns = ['id', 'code', ...regularCols.slice(1)];
+      } else if (filter === "cover") {
+        allColumns = ['id', 'cover_code', ...coverCols.slice(1)];
+      } else if (filter === "regular") {
+        allColumns = ['id', 'regularpwpcode', ...regularCols.slice(1)];
+      }
+
+      const normalizedData = filteredData.map(item => {
+        if (filter === "all") {
+          return {
+            ...item,
+            code: item.regularpwpcode || item.cover_code || '-',
+            accountType: item.accountType || item.account_type || '-',
+            pwptype: item.pwptype || item.pwp_type || '-'
+          };
+        }
+        return item;
+      });
+
+      setColumns(allColumns);
+      setData(normalizedData);
+    } else {
+      setData([]);
+      setColumns([]);
+    }
+  } catch (err) {
+    setError(`Unexpected error: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+}, [filter, REGULAR_COLUMNS, COVER_COLUMNS, statusFilter, searchQuery, dateFrom, dateTo]);
 
   // Updated getStatusBadge function - replace your existing one
   const getStatusBadge = (status) => {

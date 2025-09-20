@@ -232,103 +232,76 @@ function Category_Listing() {
                         }}
                     />
 
-                    <div className="brand-table-wrapper">
-                        <table>
+                    <div style={tableWrapperStyle}>
+                        <table style={tableStyle}>
                             <thead>
                                 <tr>
-                                    <th>Name</th>
-                                    <th>Description</th>
-                                    <th>Actions</th>
+                                    <th style={thStyle}>Name</th>
+                                    <th style={thStyle}>Description</th>
+                                    <th style={thStyle}>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {filteredListings.length === 0 ? (
                                     <tr>
-                                        <td colSpan={3}>No listings match your search.</td>
+                                        <td style={noDataStyle} colSpan={3}>
+                                            No listings match your search.
+                                        </td>
                                     </tr>
                                 ) : (
                                     filteredListings.map((item) => (
-                                        <tr key={item.id}>
-                                            <td>{item.name}</td>
-                                            <td>{item.description}</td>
-                                            <td>
-                                                        <button
+                                        <tr key={item.id} style={{}}>
+                                            <td style={tdStyle}>{item.name}</td>
+                                            <td style={tdStyle}>{item.description}</td>
+                                            <td style={tdStyle}>
+                                                <button
                                                     onClick={() => openFormModal(item)}
                                                     aria-label={`Edit ${item.name}`}
                                                     title="Edit"
-                                                    style={{
-                                                        border: "none",
-                                                        background: "none",
-                                                        cursor: "pointer",
-                                                        padding: "8px",
-                                                        color: "#d32f2f",
-                                                        transition: "transform 0.3s ease, box-shadow 0.3s ease",
-                                                        boxShadow: "0 4px 6px rgba(0,0,0,0.2)",
-                                                        borderRadius: "8px",
-                                                        display: "inline-flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "center",
-                                                        marginLeft: "8px",
-                                                        outline: "none",
-                                                    }}
+                                                    style={editButtonStyle}
                                                     onMouseEnter={(e) => {
-                                                        e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
-                                                        e.currentTarget.style.boxShadow = "0 8px 15px rgba(0, 252, 34, 0.5)";
+                                                        e.currentTarget.style.transform = "scale(1.1)";
+                                                        e.currentTarget.style.boxShadow = "0 6px 12px rgba(255,165,0,0.5)";
                                                     }}
                                                     onMouseLeave={(e) => {
-                                                        e.currentTarget.style.transform = "scale(1) rotateX(0) rotateY(0)";
-                                                        e.currentTarget.style.boxShadow = "0 4px 6px rgba(0,0,0,0.2)";
+                                                        e.currentTarget.style.transform = "scale(1)";
+                                                        e.currentTarget.style.boxShadow = "0 4px 6px rgba(255,165,0,0.3)";
                                                     }}
                                                     onMouseDown={(e) => {
-                                                        e.currentTarget.style.transform = "scale(0.95) rotateX(5deg) rotateY(5deg)";
-                                                        e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
+                                                        e.currentTarget.style.transform = "scale(0.95)";
+                                                        e.currentTarget.style.boxShadow = "0 2px 5px rgba(255,140,0,0.6)";
                                                     }}
                                                     onMouseUp={(e) => {
-                                                        e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
-                                                        e.currentTarget.style.boxShadow = "0 8px 15px rgba(0, 255, 128, 0.5)";
+                                                        e.currentTarget.style.transform = "scale(1.1)";
+                                                        e.currentTarget.style.boxShadow = "0 6px 12px rgba(255,165,0,0.5)";
                                                     }}
                                                 >
-                                                    <FaEdit style={{ color: 'orange', fontSize: '20px' }} />
+                                                    <FaEdit style={{ fontSize: 20 }} />
                                                 </button>
-
 
                                                 <button
                                                     onClick={() => handleDelete(item.id)}
                                                     aria-label={`Delete ${item.name}`}
                                                     title="Delete"
-                                                    style={{
-                                                        border: "none",
-                                                        background: "none",
-                                                        cursor: "pointer",
-                                                        padding: "8px",
-                                                        color: "#d32f2f",
-                                                        transition: "transform 0.3s ease, box-shadow 0.3s ease",
-                                                        boxShadow: "0 4px 6px rgba(0,0,0,0.2)",
-                                                        borderRadius: "8px",
-                                                        display: "inline-flex",
-                                                        alignItems: "center",
-                                                        justifyContent: "center",
-                                                        marginLeft: "8px",
-                                                        outline: "none",
-                                                    }}
+                                                    style={deleteButtonStyle}
                                                     onMouseEnter={(e) => {
-                                                        e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
-                                                        e.currentTarget.style.boxShadow = "0 8px 15px rgba(211, 47, 47, 0.5)";
+                                                        e.currentTarget.style.transform = "scale(1.1)";
+                                                        e.currentTarget.style.boxShadow = "0 6px 12px rgba(211,47,47,0.5)";
                                                     }}
                                                     onMouseLeave={(e) => {
-                                                        e.currentTarget.style.transform = "scale(1) rotateX(0) rotateY(0)";
-                                                        e.currentTarget.style.boxShadow = "0 4px 6px rgba(0,0,0,0.2)";
+                                                        e.currentTarget.style.transform = "scale(1)";
+                                                        e.currentTarget.style.boxShadow = "0 4px 6px rgba(211,47,47,0.3)";
                                                     }}
                                                     onMouseDown={(e) => {
-                                                        e.currentTarget.style.transform = "scale(0.95) rotateX(5deg) rotateY(5deg)";
-                                                        e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.3)";
+                                                        e.currentTarget.style.transform = "scale(0.95)";
+                                                        e.currentTarget.style.boxShadow = "0 2px 5px rgba(139,0,0,0.6)";
                                                     }}
                                                     onMouseUp={(e) => {
-                                                        e.currentTarget.style.transform = "scale(1.1) rotateX(10deg) rotateY(10deg)";
-                                                        e.currentTarget.style.boxShadow = "0 8px 15px rgba(211, 47, 47, 0.5)";
+                                                        e.currentTarget.style.transform = "scale(1.1)";
+                                                        e.currentTarget.style.boxShadow = "0 6px 12px rgba(211,47,47,0.5)";
                                                     }}
                                                 >
-                                                    <FaTrash style={{ fontSize: '20px' }} />
+                                                    <FaTrash style={{ fontSize: 20 }} />
                                                 </button>
                                             </td>
                                         </tr>
@@ -337,6 +310,7 @@ function Category_Listing() {
                             </tbody>
                         </table>
                     </div>
+
                 </div>
             ) : (
                 <div className="activities-modal no-selection">
@@ -361,7 +335,7 @@ function Category_Listing() {
                                 />
                             </div>
                             <div className="form-group">
-                                <label>Description</label>
+                                <label>PACKING</label>
                                 <textarea
                                     name="description"
                                     value={formData.description}
@@ -379,5 +353,73 @@ function Category_Listing() {
         </div>
     );
 }
+const tableWrapperStyle = {
+  overflowX: "auto",
+  marginTop: 20,
+  borderRadius: 10,
+  boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+  backgroundColor: "#fff",
+  padding: 20,
+  fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+};
+
+const tableStyle = {
+  width: "100%",
+  borderCollapse: "separate",
+  borderSpacing: "0 10px",
+};
+
+const thStyle = {
+  padding: "12px 20px",
+  textAlign: "left",
+  fontWeight: "600",
+  fontSize: 16,
+  color: "#ffffffff",
+  borderBottom: "2px solid #ddd",
+  backgroundColor: "#0087c5ff",
+};
+
+const tdStyle = {
+  padding: "15px 20px",
+  fontSize: 15,
+  color: "#333",
+  backgroundColor: "#fafafa",
+  borderRadius: 8,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+};
+
+const noDataStyle = {
+  textAlign: "center",
+  padding: 30,
+  fontSize: 16,
+  color: "#999",
+  fontStyle: "italic",
+};
+
+const buttonBaseStyle = {
+  border: "none",
+  background: "none",
+  cursor: "pointer",
+  padding: 10,
+  borderRadius: 8,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  marginLeft: 10,
+  transition: "transform 0.25s ease, box-shadow 0.25s ease",
+  outline: "none",
+};
+
+const editButtonStyle = {
+  ...buttonBaseStyle,
+  color: "orange",
+  boxShadow: "0 4px 6px rgba(255,165,0,0.3)",
+};
+
+const deleteButtonStyle = {
+  ...buttonBaseStyle,
+  color: "#d32f2f",
+  boxShadow: "0 4px 6px rgba(211,47,47,0.3)",
+};
 
 export default Category_Listing;

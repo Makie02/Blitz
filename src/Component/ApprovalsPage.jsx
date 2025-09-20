@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ApprovalDropdownButtons from './ApprovalDropdownButton';
 import './ApprovalsPage.css';
+import Swal from 'sweetalert2'; // Make sure you have this at the top
+
 import { supabase } from '../supabaseClient';
 import ViewDataModal from './ViewData/ViewDataModal';
 export default function ApprovalsPage() {
@@ -199,6 +201,12 @@ export default function ApprovalsPage() {
 
   // Filter logic
   useEffect(() => {
+    const currentUser = JSON.parse(localStorage.getItem('loggedInUser'));
+    const currentUserName = currentUser?.name?.toLowerCase().trim() || "";
+    const role = currentUser?.role || ""; // <-- get role here
+    console.log("User name:", currentUser?.name || "");
+    console.log("Role:", role);
+
     const newFilteredData = approvals.filter((entry) => {
       const entryType = entry.pwp_type?.toLowerCase();
       const entryStatus = entry.status?.toLowerCase();
@@ -239,10 +247,13 @@ export default function ApprovalsPage() {
         })()
         : true;
 
-      // User permission
-      const isUserAllowed = createdFormName
-        ? allowedApproverNames.includes(createdFormName) || createdFormName === myName.toLowerCase()
-        : true;
+      // User permission + CreatedForm match with current user
+      const isUserAllowed = role === 'admin'
+        ? true
+        : createdFormName
+          ? (allowedApproverNames.includes(createdFormName) || createdFormName === myName.toLowerCase())
+          && createdFormName === currentUserName
+          : true;
 
       return (
         matchesSearch &&
@@ -478,113 +489,186 @@ export default function ApprovalsPage() {
   }, [approvalSetting, currentUser?.UserID]);
 
 
-  const handleApproveClick = async (entryCode) => {
-    const entry = approvals.find((item) => item.code === entryCode);
-    if (!entry || !entry.code) return;
 
-    console.log("Approving entry code:", entry.code);  // <-- Added console.log here
 
-    const dateTime = new Date().toISOString();
-    const currentUser = JSON.parse(localStorage.getItem("loggedInUser"));
-    const userId = currentUser?.UserID || "unknown";
+const handleApproveClick = async (entryCode) => {
+  const entry = approvals.find((item) => item.code === entryCode);
+  if (!entry || !entry.code) return;
 
-    try {
-      // 1. Insert into Approval_History
-      const { error: historyError } = await supabase
-        .from("Approval_History")
-        .insert({
-          PwpCode: entry.code,
-          ApproverId: userId,
-          DateResponded: dateTime,
-          Response: "Approved",
-          Type: userType || "admin",
-          Notication: false,
-          CreatedForm: entry.createdForm,
-        });
+  console.log("🔍 Entry being approved:", entry);
 
-      if (historyError) {
-        console.error("Supabase insert error:", historyError.message);
-        return;
-      }
+  const dateTime = new Date().toISOString();
+  const currentUser = JSON.parse(localStorage.getItem("loggedInUser"));
+  const userId = currentUser?.UserID || "unknown";
 
-      // 2. Fetch credit_budget AND coverPwpCode from regular_pwp
+  // 🔒 Prevent duplicate click
+  if (entry.isSubmitting) return;
+
+  // Set "submitting" flag in local state
+  setApprovals((prev) =>
+    prev.map((item) =>
+      item.code === entryCode ? { ...item, isSubmitting: true } : item
+    )
+  );
+
+  try {
+    // 1. Insert into Approval_History
+    const { error: historyError } = await supabase
+      .from("Approval_History")
+      .insert({
+        PwpCode: entry.code,
+        ApproverId: userId,
+        DateResponded: dateTime,
+        Response: "Approved",
+        Type: userType || "admin",
+        Notication: false,
+        CreatedForm: entry.createForm || "unknown",
+      });
+
+    if (historyError) {
+      console.error("❌ Supabase insert error:", historyError.message);
+      Swal.fire("Error", "Failed to log approval. Please try again.", "error");
+      return;
+    }
+
+    console.log("✅ Approval_History updated with:", {
+      PwpCode: entry.code,
+      CreatedForm: entry.createForm,
+      ApproverId: userId,
+    });
+
+    // Prepare update payload for amount_badget
+    let updatePayload = {
+      Approved: true,
+      createdate: dateTime,
+    };
+
+    // 2. If code starts with 'R', fetch credit_budget and coverPwpCode
+    if (entry.code.startsWith("R")) {
       const { data: pwpData, error: pwpError } = await supabase
         .from("regular_pwp")
-        .select("credit_budget, coverPwpCode")
+        .select("remaining_balance, coverPwpCode")
         .eq("regularpwpcode", entry.code)
         .single();
 
       if (pwpError || !pwpData) {
-        console.error("Failed to fetch data from regular_pwp:", pwpError?.message || "No data found");
+        console.error("❌ Failed to fetch regular_pwp:", pwpError?.message || "No data");
+        Swal.fire("Error", "Missing budget data.", "error");
         return;
       }
 
-      const creditBudget = parseFloat(pwpData.credit_budget);
+      const creditBudget = parseFloat(pwpData.remaining_balance);
       const coverPwpCode = pwpData.coverPwpCode;
 
       if (isNaN(creditBudget) || !coverPwpCode) {
-        console.error("Invalid credit_budget or missing coverPwpCode");
+        console.error("❌ Invalid credit_budget or missing coverPwpCode");
+        Swal.fire("Error", "Invalid budget or missing cover code.", "error");
         return;
       }
 
-      // 3. Update amount_badget where pwp_code === entry.code
-      const { data: updatedRows, error: updateError } = await supabase
+      // Update amount_badget where pwp_code === coverPwpCode
+      const { data: updateData, error: updateError } = await supabase
         .from("amount_badget")
         .update({
-          Approved: true,
-          createdate: dateTime,
+          remainingbalance: creditBudget,
+          ...updatePayload,
         })
+        .eq("pwp_code", coverPwpCode)
+        .select();
+
+      if (updateError) {
+        console.error("❌ Failed to update amount_badget with coverPwpCode:", updateError.message);
+        Swal.fire("Error", "Failed to update budget approval.", "error");
+        return;
+      }
+
+      console.log("✅ amount_badget updated with coverPwpCode:", updateData);
+
+    } else {
+      // Update amount_badget where pwp_code === entry.code
+      const { data: updatedRows, error: updateError } = await supabase
+        .from("amount_badget")
+        .update(updatePayload)
         .eq("pwp_code", entry.code)
         .select();
 
       if (updateError) {
-        console.error("Failed to update amount_badget:", updateError.message);
+        console.error("❌ Failed to update amount_badget:", updateError.message);
+        Swal.fire("Error", "Failed to update budget approval.", "error");
+        return;
       } else {
-        console.log("Updated amount_badget rows:", updatedRows);
+        console.log("✅ amount_badget updated:", updatedRows);
       }
-
-      // 4. Log to RecentActivity
-      try {
-        const ipRes = await fetch("https://api.ipify.org?format=json");
-        const { ip } = await ipRes.json();
-
-        const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
-        const geo = await geoRes.json();
-
-        const activity = {
-          userId,
-          device: navigator.userAgent || "Unknown Device",
-          location: `${geo.city}, ${geo.region}, ${geo.country_name}`,
-          ip,
-          time: dateTime,
-          action: `Approved the ${entry.code}`,
-        };
-
-        const { error: activityError } = await supabase
-          .from("RecentActivity")
-          .insert(activity);
-
-        if (activityError) {
-          console.error("Activity logging failed:", activityError.message);
-        }
-      } catch (logErr) {
-        console.warn("Activity logging failed:", logErr.message);
-      }
-
-      // 5. Update local state only (no page reload)
-      setApprovals((prev) =>
-        prev.map((item) =>
-          item.code === entryCode
-            ? { ...item, status: "Approved", responseDate: dateTime }
-            : item
-        )
-      );
-
-      // Removed window.location.reload();
-    } catch (error) {
-      console.error(`Failed to approve ${entry.code}:`, error.message || error);
     }
-  };
+
+    // 3. Log to RecentActivity
+    try {
+      const ipRes = await fetch("https://api.ipify.org?format=json");
+      const { ip } = await ipRes.json();
+
+      const geoRes = await fetch(`https://ipapi.co/${ip}/json/`);
+      const geo = await geoRes.json();
+
+      const activity = {
+        userId,
+        device: navigator.userAgent || "Unknown Device",
+        location: `${geo.city}, ${geo.region}, ${geo.country_name}`,
+        ip,
+        time: dateTime,
+        action: `Approved the ${entry.code}`,
+      };
+
+      const { error: activityError } = await supabase
+        .from("RecentActivity")
+        .insert(activity);
+
+      if (activityError) {
+        console.error("⚠️ Activity log failed:", activityError.message);
+      } else {
+        console.log("📝 Activity logged:", activity);
+      }
+    } catch (logErr) {
+      console.warn("⚠️ Activity logging failed:", logErr.message);
+    }
+
+    // 4. Update local state (UI only)
+    setApprovals((prev) =>
+      prev.map((item) =>
+        item.code === entryCode
+          ? {
+              ...item,
+              status: "Approved",
+              responseDate: dateTime,
+              isSubmitting: false,
+            }
+          : item
+      )
+    );
+
+    // ✅ Swal success popup
+    Swal.fire({
+      icon: "success",
+      title: "Approved!",
+      text: `Entry ${entry.code} was approved successfully.`,
+      timer: 2500,
+      showConfirmButton: false,
+    });
+    window.location.reload(); // ✅ Reload page after clicking "OK"
+
+  } catch (error) {
+    console.error(`❌ Failed to approve ${entry.code}:`, error.message || error);
+    Swal.fire("Error", "Something went wrong during approval.", "error");
+
+    // Reset submitting flag on error
+    setApprovals((prev) =>
+      prev.map((item) =>
+        item.code === entryCode ? { ...item, isSubmitting: false } : item
+      )
+    );
+  }
+};
+
+
 
 
 
@@ -884,6 +968,10 @@ export default function ApprovalsPage() {
 
 
 
+
+  const userId = currentUser?.UserID || "unknown";
+  const names = currentUser?.name || "";
+  console.log("User name:", names);  // <--- console log here
   return (
     <div
       style={{
@@ -916,7 +1004,7 @@ export default function ApprovalsPage() {
           marginBottom: '16px',
         }}
       >
-            <div className="filter-item" style={{ flexGrow: 1, minWidth: '200px' }}>
+        <div className="filter-item" style={{ flexGrow: 1, minWidth: '200px' }}>
           <input
             type="text"
             placeholder="🔍 Search Approvals..."
@@ -938,7 +1026,7 @@ export default function ApprovalsPage() {
 
         {/* Marketing Type Filter */}
         <div className="filter-item">
-          
+
           <select
             value={visaTypeFilter}
             onChange={(e) => setVisaTypeFilter(e.target.value)}
@@ -1018,7 +1106,7 @@ export default function ApprovalsPage() {
         </div>
 
         {/* Search */}
-    
+
         {/* Today Filter (Checkbox) */}
         <label
           style={{
@@ -1115,12 +1203,24 @@ export default function ApprovalsPage() {
           <tbody style={{ fontSize: '12px', color: '#000000ff' }}>
             {paginatedData.length > 0 ? (
               [...paginatedData]
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // sort latest first
+                // Filter to show only entries where createForm matches current user (case-insensitive)
+                .filter(entry => {
+                  const currentUser = JSON.parse(localStorage.getItem('loggedInUser'));
+                  const currentUserId = currentUser?.name?.toLowerCase().trim() || "";
+                  const role = currentUser?.role?.toLowerCase() || "";
+
+                  // Show all if Admin
+                  if (role === "admin") return true;
+
+                  // Otherwise, only show if createForm matches
+                  return (entry.createForm || "").toLowerCase().trim() === currentUserId;
+                })
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
                 .map((entry, index) => {
                   const status = getLatestResponseStatus(entry.code, approvalHistory);
                   const currentUser = JSON.parse(localStorage.getItem('loggedInUser'));
                   const currentUserId = currentUser?.name?.toLowerCase().trim();
-                  const isOwner = entry.createdForm?.toLowerCase().trim() === currentUserId;
+                  const isOwner = entry.createForm?.toLowerCase().trim() === currentUserId;
 
                   return (
                     <tr
@@ -1301,6 +1401,7 @@ export default function ApprovalsPage() {
               </tr>
             )}
           </tbody>
+
 
 
           {modalVisaCode && (

@@ -183,26 +183,26 @@ export default function VisaCalendar() {
     }
   };
 
-const getIconByStatus = (status) => {
-  status = typeof status === "boolean" ? (status ? "approved" : "false") : (status || "").toLowerCase();
+  const getIconByStatus = (status) => {
+    status = typeof status === "boolean" ? (status ? "approved" : "false") : (status || "").toLowerCase();
 
-  switch (status) {
-    case "approved":
-    case "true":
-      return <FaCheckCircle style={{ marginRight: 5, color: "#28a745" }} />;
-    case "false":
-    case "declined":
-      return <FaTimesCircle style={{ marginRight: 5, color: "#f3f3f3ff" }} />;
-    case "revision":
-    case "sent back for revision":
-      return <FaExclamationTriangle style={{ marginRight: 5, color: "#ff0000ff" }} />;
-    case "cancel":
-    case "cancelled":
-      return <FaTimesCircle style={{ marginRight: 5, color: "#ffffffff" }} />;
-    default:
-      return <FaHourglassHalf style={{ marginRight: 5, color: "#7700ffff" }} />;
-  }
-};
+    switch (status) {
+      case "approved":
+      case "true":
+        return <FaCheckCircle style={{ marginRight: 5, color: "#28a745" }} />;
+      case "false":
+      case "declined":
+        return <FaTimesCircle style={{ marginRight: 5, color: "#f3f3f3ff" }} />;
+      case "revision":
+      case "sent back for revision":
+        return <FaExclamationTriangle style={{ marginRight: 5, color: "#ff0000ff" }} />;
+      case "cancel":
+      case "cancelled":
+        return <FaTimesCircle style={{ marginRight: 5, color: "#ffffffff" }} />;
+      default:
+        return <FaHourglassHalf style={{ marginRight: 5, color: "#7700ffff" }} />;
+    }
+  };
 
   const handleDropFromOutside = async ({ start, end }) => {
     try {
@@ -234,125 +234,127 @@ const getIconByStatus = (status) => {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
-const onSelectEvent = (event) => {
-  console.log("Event clicked:", event);  // <-- add this
-  const codeKey = event.cover_code || event.regularpwpcode || event.visaCode || null;
+  const onSelectEvent = (event) => {
+    console.log("Event clicked:", event);  // <-- add this
+    const codeKey = event.cover_code || event.regularpwpcode || event.visaCode || null;
 
-  const fullEvent = events.find(
-    (ev) => ev.cover_code === codeKey || ev.regularpwpcode === codeKey || ev.visaCode === codeKey
-  ) || event;
+    const fullEvent = events.find(
+      (ev) => ev.cover_code === codeKey || ev.regularpwpcode === codeKey || ev.visaCode === codeKey
+    ) || event;
 
-  setSelectedEvent(fullEvent);
-  setModalOpen(true);
-};
+    setSelectedEvent(fullEvent);
+    setModalOpen(true);
+  };
 
   const closeModal = () => {
     setModalOpen(false);
     setSelectedEvent(null);
   };
-const renderModalContent = () => {
-  if (!selectedEvent) return null;
+  const renderModalContent = () => {
+    if (!selectedEvent) return null;
 
-  const e = selectedEvent;
+    const e = selectedEvent;
 
-  const containerStyle = {
-    fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-    color: "#333",
-    lineHeight: 1.5,
-  };
+    const containerStyle = {
+      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+      color: "#333",
+      lineHeight: 1.5,
+    };
 
-  const headerStyle = {
-    marginBottom: "16px",
-    fontSize: "1.5rem",
-    borderBottom: "2px solid #007bff",
-    paddingBottom: "6px",
-    color: "#007bff",
-  };
+    const headerStyle = {
+      marginBottom: "16px",
+      fontSize: "1.5rem",
+      borderBottom: "2px solid #007bff",
+      paddingBottom: "6px",
+      color: "#007bff",
+    };
 
-  const labelStyle = {
-    fontWeight: "600",
-    marginRight: "8px",
-    color: "#555",
-  };
+    const labelStyle = {
+      fontWeight: "600",
+      marginRight: "8px",
+      color: "#555",
+    };
 
-  const valueStyle = {
-    color: "#222",
-  };
+    const valueStyle = {
+      color: "#222",
+    };
 
-  const itemStyle = {
-    marginBottom: "12px",
-    display: "flex",
-    flexWrap: "wrap",
-  };
+    const itemStyle = {
+      marginBottom: "12px",
+      display: "flex",
+      flexWrap: "wrap",
+    };
 
-  if (e.sourcePath === "cover_pwp") {
+    if (e.sourcePath === "cover_pwp") {
+      return (
+        <div style={containerStyle}>
+          <h3 style={headerStyle}>Cover PWP Details</h3>
+          <div style={itemStyle}>
+            <span style={labelStyle}>Cover Code:</span>
+            <span style={valueStyle}>{e.cover_code || e.visaCode || "N/A"}</span>
+          </div>
+          <div style={itemStyle}>
+            <span style={labelStyle}>Distributor Code:</span>
+            <span style={valueStyle}>{e.distributor_code || "N/A"}</span>
+          </div>
+          <div style={itemStyle}>
+            <span style={labelStyle}>Amount Budget:</span>
+            <span style={valueStyle}>{e.amount_badget || "N/A"}</span>
+          </div>
+          <div style={itemStyle}>
+            <span style={labelStyle}>Created At:</span>
+            <span style={valueStyle}>
+              {e.created_at
+                ? new Date(e.created_at).toLocaleString()
+                : e.DateCreated
+                  ? new Date(e.DateCreated).toLocaleString()
+                  : "N/A"}
+            </span>
+          </div>
+          <div style={itemStyle}>
+            <span style={labelStyle}>Create Form:</span>
+            <span style={valueStyle}>{e.createForm || "N/A"}</span>
+          </div>
+        </div>
+      );
+    } else if (e.sourcePath === "regular_pwp") {
+      return (
+        <div style={containerStyle}>
+          <h3 style={headerStyle}>Regular PWP Details</h3>
+          <div style={itemStyle}>
+            <span style={labelStyle}>Regular PWP Code:</span>
+            <span style={valueStyle}>{e.regularpwpcode || e.visaCode || "N/A"}</span>
+          </div>
+          <div style={itemStyle}>
+            <span style={labelStyle}>Is Part Of Cover PWP:</span>
+            <span style={valueStyle}>{e.isPartOfCoverPwp ? "Yes" : "No"}</span>
+          </div>
+          <div style={itemStyle}>
+            <span style={labelStyle}>Cover PWP Code:</span>
+            <span style={valueStyle}>{e.coverPwpCode || "N/A"}</span>
+          </div>
+          <div style={itemStyle}>
+            <span style={labelStyle}>Remaining Balance:</span>
+            <span style={valueStyle}>{e.remaining_balance || "N/A"}</span>
+          </div>
+          <div style={itemStyle}>
+            <span style={labelStyle}>Credit Budget:</span>
+            <span style={valueStyle}>{e.credit_budget || "N/A"}</span>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div style={containerStyle}>
-        <h3 style={headerStyle}>Cover PWP Details</h3>
-        <div style={itemStyle}>
-          <span style={labelStyle}>Cover Code:</span>
-          <span style={valueStyle}>{e.cover_code || e.visaCode || "N/A"}</span>
-        </div>
-        <div style={itemStyle}>
-          <span style={labelStyle}>Distributor Code:</span>
-          <span style={valueStyle}>{e.distributor_code || "N/A"}</span>
-        </div>
-        <div style={itemStyle}>
-          <span style={labelStyle}>Amount Budget:</span>
-          <span style={valueStyle}>{e.amount_badget || "N/A"}</span>
-        </div>
-        <div style={itemStyle}>
-          <span style={labelStyle}>Created At:</span>
-          <span style={valueStyle}>
-            {e.created_at
-              ? new Date(e.created_at).toLocaleString()
-              : e.DateCreated
-              ? new Date(e.DateCreated).toLocaleString()
-              : "N/A"}
-          </span>
-        </div>
-        <div style={itemStyle}>
-          <span style={labelStyle}>Create Form:</span>
-          <span style={valueStyle}>{e.createForm || "N/A"}</span>
-        </div>
+        <p>No additional details available.</p>
       </div>
     );
-  } else if (e.sourcePath === "regular_pwp") {
-    return (
-      <div style={containerStyle}>
-        <h3 style={headerStyle}>Regular PWP Details</h3>
-        <div style={itemStyle}>
-          <span style={labelStyle}>Regular PWP Code:</span>
-          <span style={valueStyle}>{e.regularpwpcode || e.visaCode || "N/A"}</span>
-        </div>
-        <div style={itemStyle}>
-          <span style={labelStyle}>Is Part Of Cover PWP:</span>
-          <span style={valueStyle}>{e.isPartOfCoverPwp ? "Yes" : "No"}</span>
-        </div>
-        <div style={itemStyle}>
-          <span style={labelStyle}>Cover PWP Code:</span>
-          <span style={valueStyle}>{e.coverPwpCode || "N/A"}</span>
-        </div>
-        <div style={itemStyle}>
-          <span style={labelStyle}>Remaining Balance:</span>
-          <span style={valueStyle}>{e.remaining_balance || "N/A"}</span>
-        </div>
-        <div style={itemStyle}>
-          <span style={labelStyle}>Credit Budget:</span>
-          <span style={valueStyle}>{e.credit_budget || "N/A"}</span>
-        </div>
-      </div>
-    );
-  }
+  };
 
-  return (
-    <div style={containerStyle}>
-      <p>No additional details available.</p>
-    </div>
-  );
-};
-
-
+  const currentUser = JSON.parse(localStorage.getItem("loggedInUser"));
+  const currentUserName = currentUser?.name?.toLowerCase().trim() || "";
+  const role = currentUser?.role || "";
   return (
     <div style={{ display: "flex", height: "90vh", padding: '20px' }}>
       <div style={{ flex: 3, position: "relative" }}>
@@ -395,6 +397,8 @@ const renderModalContent = () => {
           {showUnscheduled ? "Hide Unscheduled" : " Unscheduled"}
         </button>
 
+        And here's your updated calendar filtering:
+
         <DnDCalendar
           defaultView="month"
           views={["month", "week", "day", "agenda"]}
@@ -402,7 +406,8 @@ const renderModalContent = () => {
           events={events.filter((e) =>
             e.start &&
             e.end &&
-            (!showOnlyApproved || (e.status?.toLowerCase() === "approved" || e.status === true))
+            (!showOnlyApproved || (e.status?.toLowerCase() === "approved" || e.status === true)) &&
+            (role === "admin" || e.createForm?.toLowerCase().trim() === currentUserName)
           )}
           onEventDrop={moveEvent}
           onEventResize={moveEvent}
@@ -418,8 +423,8 @@ const renderModalContent = () => {
 
             if (status === "approved" || status === "true") backgroundColor = "green";
             else if (status === "false" || status === "declined") backgroundColor = "#dc3545";
-            else if (status === "revision" || status === "sent back for revision") backgroundColor = "#6c757d"; // gray
-            else if (status === "cancel" || status === "cancelled") backgroundColor = "#ff0000"; // bright red
+            else if (status === "revision" || status === "sent back for revision") backgroundColor = "#6c757d";
+            else if (status === "cancel" || status === "cancelled") backgroundColor = "#ff0000";
 
             return {
               style: {
@@ -431,8 +436,6 @@ const renderModalContent = () => {
               },
             };
           }}
-
-
           components={{
             event: ({ event }) => (
               <span>
@@ -443,50 +446,50 @@ const renderModalContent = () => {
           }}
         />
       </div>
-   {modalOpen && (
-            <div
+      {modalOpen && (
+        <div
+          onClick={closeModal}
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 2000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: "white",
+              borderRadius: 8,
+              padding: 24,
+              width: 400,
+              maxHeight: "80vh",
+              overflowY: "auto",
+              boxShadow: "0 5px 15px rgba(0,0,0,.3)",
+            }}
+          >
+            <button
               onClick={closeModal}
               style={{
-                position: "fixed",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: "rgba(0,0,0,0.5)",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                zIndex: 2000,
+                float: "right",
+                border: "none",
+                background: "none",
+                fontSize: 18,
+                cursor: "pointer",
               }}
             >
-              <div
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  backgroundColor: "white",
-                  borderRadius: 8,
-                  padding: 24,
-                  width: 400,
-                  maxHeight: "80vh",
-                  overflowY: "auto",
-                  boxShadow: "0 5px 15px rgba(0,0,0,.3)",
-                }}
-              >
-                <button
-                  onClick={closeModal}
-                  style={{
-                    float: "right",
-                    border: "none",
-                    background: "none",
-                    fontSize: 18,
-                    cursor: "pointer",
-                  }}
-                >
-                  &times;
-                </button>
-                {renderModalContent()}
-              </div>
-            </div>
-          )}
+              &times;
+            </button>
+            {renderModalContent()}
+          </div>
+        </div>
+      )}
       {/* Unscheduled List */}
       {showUnscheduled && (
         <div
@@ -563,7 +566,7 @@ const renderModalContent = () => {
               })
           )}
 
-       
+
         </div>
       )}
     </div>
